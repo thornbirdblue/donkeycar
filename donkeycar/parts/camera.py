@@ -19,19 +19,22 @@ class BaseCamera:
 
 class PiCamera(BaseCamera):
     def __init__(self, image_w=160, image_h=120, image_d=3, framerate=20, vflip=False, hflip=False):
-        from picamera.array import PiRGBArray
-        from picamera import PiCamera
+#        from picamera.array import PiRGBArray
+#        from picamera import PiCamera
+        from picamera2 import Picamera2,Preview
 
         resolution = (image_w, image_h)
         # initialize the camera and stream
-        self.camera = PiCamera() #PiCamera gets resolution (height, width)
+        self.camera = Picamera2() #PiCamera gets resolution (height, width)
         self.camera.resolution = resolution
         self.camera.framerate = framerate
         self.camera.vflip = vflip
         self.camera.hflip = hflip
-        self.rawCapture = PiRGBArray(self.camera, size=resolution)
-        self.stream = self.camera.capture_continuous(self.rawCapture,
-            format="rgb", use_video_port=True)
+#        self.rawCapture = PiRGBArray(self.camera, size=resolution)
+        self.config = self.camera.create_preview_configuration({"format": "RGB888"})
+        self.camera.configure(self.config)
+#        self.stream = self.camera.capture_continuous(self.rawCapture,
+#            format="rgb", use_video_port=True)
 
         # initialize the frame and the variable used to indicate
         # if the thread should be stopped
@@ -40,31 +43,35 @@ class PiCamera(BaseCamera):
         self.image_d = image_d
 
         # get the first frame or timeout
-        logger.info('PiCamera loaded...')
-        if self.stream is not None:
-            logger.info('PiCamera opened...')
-            warming_time = time.time() + 5  # quick after 5 seconds
-            while self.frame is None and time.time() < warming_time:
-                logger.info("...warming camera")
-                self.run()
-                time.sleep(0.2)
+        logger.info('PiCamera2 loaded...')
+        self.camera.start_preview(Preview.NULL)
+        self.camera.start()
+#       if self.stream is not None:
+        logger.info('PiCamera opened...')
+        warming_time = time.time() + 5  # quick after 5 seconds
+        while self.frame is None and time.time() < warming_time:
+            logger.info("...warming camera")
+            self.run()
+            time.sleep(0.2)
 
-            if self.frame is None:
-                raise CameraError("Unable to start PiCamera.")
-        else:
-            raise CameraError("Unable to open PiCamera.")
+        if self.frame is None:
+            raise CameraError("Unable to start PiCamera.")
+ #      else:
+ #          raise CameraError("Unable to open PiCamera.")
         logger.info("PiCamera ready.")
 
     def run(self):
         # grab the frame from the stream and clear the stream in
         # preparation for the next frame
-        if self.stream is not None:
-            f = next(self.stream)
-            if f is not None:
-                self.frame = f.array
-                self.rawCapture.truncate(0)
-                if self.image_d == 1:
-                    self.frame = rgb2gray(self.frame)
+#       if self.stream is not None:
+#           f = next(self.stream)
+#           if f is not None:
+#               self.frame = f.array
+#               self.rawCapture.truncate(0)
+#               if self.image_d == 1:
+#                   self.frame = rgb2gray(self.frame)
+        self.frame = self.camera.capture_array()
+#        self.frame = self.camera.capture_buffer()
 
         return self.frame
 
@@ -76,13 +83,15 @@ class PiCamera(BaseCamera):
     def shutdown(self):
         # indicate that the thread should be stopped
         self.on = False
-        logger.info('Stopping PiCamera')
+        logger.info('Stopping PiCamera2')
         time.sleep(.5)
-        self.stream.close()
-        self.rawCapture.close()
+#       self.stream.close()
+#        self.rawCapture.close()
+        self.camera.stop_preview()
+        self.camera.stop()
         self.camera.close()
-        self.stream = None
-        self.rawCapture = None
+#        self.stream = None
+#        self.rawCapture = None
         self.camera = None
 
 
